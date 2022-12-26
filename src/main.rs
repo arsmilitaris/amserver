@@ -14,6 +14,12 @@ struct Tile;
 struct Unit;
 
 #[derive(Component)]
+struct Pos {
+	x: usize,
+	y: usize,
+}
+
+#[derive(Component)]
 struct UnitId { value: usize, }
 
 #[derive(Component)]
@@ -95,6 +101,7 @@ struct UnitAttributes {
 
 // Client & Server
 fn main() {
+	
     App::new()
 		.add_plugins(DefaultPlugins)
 		.add_startup_system(read_battle_system.pipe(generate_units_system))
@@ -175,6 +182,10 @@ fn setup_map_system(In(map): In<Vec<Vec<String>>>, mut commands: Commands, asset
 					..default()
 				}),
 				Tile,
+				Pos {
+					x: i,
+					y: j,
+				},
 			));
 		}
 	}
