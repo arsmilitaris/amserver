@@ -106,6 +106,7 @@ fn main() {
 		.add_plugins(DefaultPlugins)
 		.add_startup_system(read_battle_system.pipe(generate_units_system))
 		.add_startup_system(read_map_system.pipe(setup_map_system))
+		.add_system(place_units_on_map_system.after(read_map_system))
 		.run();
 }
 
@@ -234,4 +235,25 @@ fn generate_units_system(In(records): In<Vec<StringRecord>>, mut commands: Comma
 			Unit,
 		));
 	}
+}
+
+// Server
+fn place_units_on_map_system(unit_positions: Query<(&UnitId, &PosX, &PosY)>, mut tiles: Query<(&Tile, &Pos, &mut Text)>) {
+	
+	info!("DEBUG: Starting to place units on map...");
+	// For each Unit...
+	for (unit_id, unit_position_x, unit_position_y) in unit_positions.iter() {
+		// Get the unit X and Y coordinates.
+		let x = unit_position_x.value;
+		let y = unit_position_y.value;
+		
+		// Get the tile at coordinates (x, y)
+		for (tile, pos, mut text) in tiles.iter_mut() {
+			if pos.x == x && pos.y == y {
+				// Assign unit ID to tile.
+				info!("DEBUG: Assigning unit ID to tile.");
+				text.sections[0].value = unit_id.value.to_string();
+			}
+		}
+	}	
 }
