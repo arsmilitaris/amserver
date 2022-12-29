@@ -150,6 +150,7 @@ fn main() {
 		.add_system_set(SystemSet::on_update(GameState::Loading).with_system(generate_units_system))
 		.add_system_set(SystemSet::on_update(GameState::Loading).with_system(place_units_on_map_system))
 		.add_system_set(SystemSet::on_enter(GameState::Battle).with_system(setup_cursor_system))
+		.add_system_set(SystemSet::on_update(GameState::Battle).with_system(move_cursor_system))
 		.add_system_set(SystemSet::on_update(GameState::Battle).with_system(empty_system))
 		.run();
 }
@@ -354,13 +355,253 @@ fn setup_cursor_system(mut commands: Commands, mut tiles: Query<(&Tile, &Pos, &m
 			let mut cursor = "[".to_owned();
 			cursor.push_str(&text.sections[0].value);
 			cursor.push_str("]");
+			
+			// Assign cursor string to map.
 			text.sections[0].value = cursor;
 			
+			// Spawn the cursor Entity.
 			commands.spawn(Cursor { 
 								x: 5,
 								y: 5,
 							});
 		}
+	}
+}
+
+// Client
+fn move_cursor_system(input: Res<Input<KeyCode>>, mut cursors: Query<&mut Cursor>, mut tiles: Query<(&Tile, &Pos, &mut Text)>) {
+	
+	// Get cursor current position.
+	let mut cursor_position_x = 0;
+	let mut cursor_position_y = 0;
+	for cursor in cursors.iter_mut() {
+		cursor_position_x = cursor.x;
+		cursor_position_y = cursor.y;
+	}
+	
+	if input.just_pressed(KeyCode::A) {
+		
+		// Save the previous cursor position to later be used in removing the cursor.
+		let cursor_previous_x = cursor_position_x;
+		let cursor_previous_y = cursor_position_y;
+		
+		if cursor_position_y == 9 {
+			info!("DEBUG: You can't move the cursor there.");
+		} else {
+			
+		
+			// Find tile to the left of cursor.
+			for (tile, pos, mut text) in tiles.iter_mut() {
+				if pos.x == cursor_position_x && pos.y == cursor_position_y + 1 {
+					// Move the cursor to the new position.
+					info!("DEBUG: Found tile at coordinates {}, {}.", pos.x, pos.y);
+					
+					// Build cursor string.
+					let mut cursor_string = "[".to_owned();
+					cursor_string.push_str(&text.sections[0].value);
+					cursor_string.push_str("]");
+					text.sections[0].value = cursor_string;
+					
+					
+					
+					
+					// Update the cursor Entity.
+					for mut cursor in cursors.iter_mut() {
+						cursor.x = pos.x;
+						cursor.y = pos.y;
+
+					}
+				}
+			}
+			
+			// Remove the cursor from the previous tile.
+			for cursor in cursors.iter_mut() {
+				for (tile, pos, mut text) in tiles.iter_mut() {
+					if pos.x == cursor_previous_x && pos.y == cursor_previous_y {
+						// Remove [ and ] from tile.
+						let mut tile_string = &text.sections[0].value;
+						let mut tile_string_split = tile_string.split("[");
+						let vec = tile_string_split.collect::<Vec<&str>>();
+						let mut tile_string_split_2 = vec[1].split("]");
+						let vec2 = tile_string_split_2.collect::<Vec<&str>>();
+						let new_tile_string = vec2[0];
+						
+						// Assign new string to tile.
+						text.sections[0].value = new_tile_string.to_string();
+					}
+				}
+			}
+		}
+		
+		info!("DEBUG: Moving the cursor...");
+		
+	} else if input.just_pressed(KeyCode::D) {
+	
+		// Save the previous cursor position to later be used in removing the cursor.
+		let cursor_previous_x = cursor_position_x;
+		let cursor_previous_y = cursor_position_y;
+		
+		if cursor_position_y == 0 {
+			info!("DEBUG: You can't move the cursor there.");
+		} else {
+			
+		
+			// Find tile to the left of cursor.
+			for (tile, pos, mut text) in tiles.iter_mut() {
+				if pos.x == cursor_position_x && pos.y == cursor_position_y - 1 {
+					// Move the cursor to the new position.
+					info!("DEBUG: Found tile at coordinates {}, {}.", pos.x, pos.y);
+					
+					// Build cursor string.
+					let mut cursor_string = "[".to_owned();
+					cursor_string.push_str(&text.sections[0].value);
+					cursor_string.push_str("]");
+					text.sections[0].value = cursor_string;
+					
+					
+					
+					
+					// Update the cursor Entity.
+					for mut cursor in cursors.iter_mut() {
+						cursor.x = pos.x;
+						cursor.y = pos.y;
+
+					}
+				}
+			}
+			
+			// Remove the cursor from the previous tile.
+			for cursor in cursors.iter_mut() {
+				for (tile, pos, mut text) in tiles.iter_mut() {
+					if pos.x == cursor_previous_x && pos.y == cursor_previous_y {
+						// Remove [ and ] from tile.
+						let mut tile_string = &text.sections[0].value;
+						let mut tile_string_split = tile_string.split("[");
+						let vec = tile_string_split.collect::<Vec<&str>>();
+						let mut tile_string_split_2 = vec[1].split("]");
+						let vec2 = tile_string_split_2.collect::<Vec<&str>>();
+						let new_tile_string = vec2[0];
+						
+						// Assign new string to tile.
+						text.sections[0].value = new_tile_string.to_string();
+					}
+				}
+			}
+		}
+		
+		info!("DEBUG: Moving the cursor...");
+		
+	} else if input.just_pressed(KeyCode::W) {
+	
+		// Save the previous cursor position to later be used in removing the cursor.
+		let cursor_previous_x = cursor_position_x;
+		let cursor_previous_y = cursor_position_y;
+		
+		if cursor_position_x == 0 {
+			info!("DEBUG: You can't move the cursor there.");
+		} else {
+			
+		
+			// Find tile to the left of cursor.
+			for (tile, pos, mut text) in tiles.iter_mut() {
+				if pos.x == cursor_position_x - 1 && pos.y == cursor_position_y {
+					// Move the cursor to the new position.
+					info!("DEBUG: Found tile at coordinates {}, {}.", pos.x, pos.y);
+					
+					// Build cursor string.
+					let mut cursor_string = "[".to_owned();
+					cursor_string.push_str(&text.sections[0].value);
+					cursor_string.push_str("]");
+					text.sections[0].value = cursor_string;
+					
+					
+					
+					
+					// Update the cursor Entity.
+					for mut cursor in cursors.iter_mut() {
+						cursor.x = pos.x;
+						cursor.y = pos.y;
+
+					}
+				}
+			}
+			
+			// Remove the cursor from the previous tile.
+			for cursor in cursors.iter_mut() {
+				for (tile, pos, mut text) in tiles.iter_mut() {
+					if pos.x == cursor_previous_x && pos.y == cursor_previous_y {
+						// Remove [ and ] from tile.
+						let mut tile_string = &text.sections[0].value;
+						let mut tile_string_split = tile_string.split("[");
+						let vec = tile_string_split.collect::<Vec<&str>>();
+						let mut tile_string_split_2 = vec[1].split("]");
+						let vec2 = tile_string_split_2.collect::<Vec<&str>>();
+						let new_tile_string = vec2[0];
+						
+						// Assign new string to tile.
+						text.sections[0].value = new_tile_string.to_string();
+					}
+				}
+			}
+		}
+		
+		info!("DEBUG: Moving the cursor...");
+		
+	} else if input.just_pressed(KeyCode::S) {
+	
+		// Save the previous cursor position to later be used in removing the cursor.
+		let cursor_previous_x = cursor_position_x;
+		let cursor_previous_y = cursor_position_y;
+		
+		if cursor_position_x == 9 {
+			info!("DEBUG: You can't move the cursor there.");
+		} else {
+			
+		
+			// Find tile to the left of cursor.
+			for (tile, pos, mut text) in tiles.iter_mut() {
+				if pos.x == cursor_position_x + 1 && pos.y == cursor_position_y {
+					// Move the cursor to the new position.
+					info!("DEBUG: Found tile at coordinates {}, {}.", pos.x, pos.y);
+					
+					// Build cursor string.
+					let mut cursor_string = "[".to_owned();
+					cursor_string.push_str(&text.sections[0].value);
+					cursor_string.push_str("]");
+					text.sections[0].value = cursor_string;
+					
+					
+					
+					
+					// Update the cursor Entity.
+					for mut cursor in cursors.iter_mut() {
+						cursor.x = pos.x;
+						cursor.y = pos.y;
+
+					}
+				}
+			}
+			
+			// Remove the cursor from the previous tile.
+			for cursor in cursors.iter_mut() {
+				for (tile, pos, mut text) in tiles.iter_mut() {
+					if pos.x == cursor_previous_x && pos.y == cursor_previous_y {
+						// Remove [ and ] from tile.
+						let mut tile_string = &text.sections[0].value;
+						let mut tile_string_split = tile_string.split("[");
+						let vec = tile_string_split.collect::<Vec<&str>>();
+						let mut tile_string_split_2 = vec[1].split("]");
+						let vec2 = tile_string_split_2.collect::<Vec<&str>>();
+						let new_tile_string = vec2[0];
+						
+						// Assign new string to tile.
+						text.sections[0].value = new_tile_string.to_string();
+					}
+				}
+			}
+		}
+		
+		info!("DEBUG: Moving the cursor...");
 	}
 }
 
