@@ -10,6 +10,12 @@ use csv::StringRecord;
 // COMPONENTS
 
 #[derive(Component)]
+struct Cursor {
+	x: usize,
+	y: usize,
+}
+
+#[derive(Component)]
 struct Tile;
 
 #[derive(Component)]
@@ -143,6 +149,7 @@ fn main() {
 		.add_system_set(SystemSet::on_update(GameState::Loading).with_system(read_battle_system))
 		.add_system_set(SystemSet::on_update(GameState::Loading).with_system(generate_units_system))
 		.add_system_set(SystemSet::on_update(GameState::Loading).with_system(place_units_on_map_system))
+		.add_system_set(SystemSet::on_enter(GameState::Battle).with_system(setup_cursor_system))
 		.add_system_set(SystemSet::on_update(GameState::Battle).with_system(empty_system))
 		.run();
 }
@@ -331,6 +338,30 @@ fn start_game_system(input: Res<Input<KeyCode>>, mut events: EventWriter<GameSta
 		info!("DEBUG: Set GameState to Loading.");
         events.send(GameStartEvent);
     } 
+}
+
+// Client
+fn setup_cursor_system(mut commands: Commands, mut tiles: Query<(&Tile, &Pos, &mut Text)>) {
+	
+	info!("DEBUG: setup_cursor_system running...");
+	// Setup cursor.
+	for (tile, pos, mut text) in tiles.iter_mut() {
+		if pos.x == 5 && pos.y == 5 {
+			// Place cursor at the center of the map.
+			info!("DEBUG: Found tile at coordinates 5, 5. Placing cursor there.");
+			
+			// Build cursor string.
+			let mut cursor = "[".to_owned();
+			cursor.push_str(&text.sections[0].value);
+			cursor.push_str("]");
+			text.sections[0].value = cursor;
+			
+			commands.spawn(Cursor { 
+								x: 5,
+								y: 5,
+							});
+		}
+	}
 }
 
 fn empty_system() {
