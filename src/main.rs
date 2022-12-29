@@ -7,6 +7,10 @@ use std::fs;
 use csv::Reader;
 use csv::StringRecord;
 
+use kafka::producer::{Producer, Record, RequiredAcks};
+
+pub mod kafka_am;
+
 // COMPONENTS
 
 #[derive(Component)]
@@ -151,6 +155,8 @@ fn main() {
 		.add_system_set(SystemSet::on_update(GameState::Loading).with_system(place_units_on_map_system))
 		.add_system_set(SystemSet::on_enter(GameState::Battle).with_system(setup_cursor_system))
 		.add_system_set(SystemSet::on_update(GameState::Battle).with_system(move_cursor_system))
+		.add_system_set(SystemSet::on_enter(GameState::Battle).with_system(message_kafka_system))
+		.add_system_set(SystemSet::on_enter(GameState::Battle).with_system(receive_kafka_system))
 		.add_system_set(SystemSet::on_update(GameState::Battle).with_system(empty_system))
 		.run();
 }
@@ -603,6 +609,19 @@ fn move_cursor_system(input: Res<Input<KeyCode>>, mut cursors: Query<&mut Cursor
 		
 		info!("DEBUG: Moving the cursor...");
 	}
+}
+
+// Server
+fn message_kafka_system() {
+	let mut producer = kafka_am::producer::GameProducer::new().unwrap();
+	producer.p.send(&Record::from_value("topic2", String::from("1").as_bytes())).unwrap();
+}
+
+// Client
+fn receive_kafka_system() {
+	let gc = kafka_am::consumer::GameConsumer::new("topic2").unwrap();
+	let map = gc.recv();
+	println!("DEBUG: {}", map);
 }
 
 fn empty_system() {
