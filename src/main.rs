@@ -660,9 +660,17 @@ fn wait_turn_system(mut units: Query<(&mut WTCurrent, &WTMax, &UnitId)>, mut gam
 }
 
 // Client
-fn end_turn_system(mut input: ResMut<Input<KeyCode>>, mut commands: Commands) {
+fn end_turn_system(mut input: ResMut<Input<KeyCode>>, mut units: Query<(&mut WTCurrent, &WTMax)>, mut commands: Commands) {
 	if input.just_pressed(KeyCode::T) {
 		info!("DEBUG: The current unit has ended its turn.");
+		info!("DEBUG: Reseting the unit's WT.");
+		for (mut wt_current, wt_max) in units.iter_mut() {
+			if wt_current.value == 0 {
+				wt_current.value = wt_max.value;
+				break;
+			}
+		}
+		
 		info!("DEBUG: Setting GameState to WaitTurn...");
 		commands.insert_resource(NextState(GameState::WaitTurn));
 		info!("DEBUG: Set GameState to WaitTurn.");
