@@ -2,6 +2,8 @@
 
 use bevy::prelude::*;
 
+use iyes_loopless::prelude::*;
+
 use std::fs;
 
 use csv::Reader;
@@ -149,26 +151,43 @@ fn main() {
 	
     App::new()
 		.add_plugins(DefaultPlugins)
-		.add_state(GameState::MainMenu)
+		.add_loopless_state(GameState::MainMenu)
 		.add_event::<GameStartEvent>()
 		.add_event::<MapReadEvent>()
 		.add_event::<MapSetupEvent>()
 		.add_event::<UnitsReadEvent>()
 		.add_event::<UnitsGeneratedEvent>()
 		.init_resource::<Game>()
-		.add_system_set(SystemSet::on_update(GameState::MainMenu).with_system(start_game_system))
-		.add_system_set(SystemSet::on_update(GameState::Loading).with_system(read_map_system))
-		.add_system_set(SystemSet::on_update(GameState::Loading).with_system(setup_map_system))
-		.add_system_set(SystemSet::on_update(GameState::Loading).with_system(read_battle_system))
-		.add_system_set(SystemSet::on_update(GameState::Loading).with_system(generate_units_system))
-		.add_system_set(SystemSet::on_update(GameState::Loading).with_system(place_units_on_map_system))
-		.add_system_set(SystemSet::on_enter(GameState::Battle).with_system(setup_cursor_system))
-		.add_system_set(SystemSet::on_update(GameState::Battle).with_system(move_cursor_system))
-		.add_system_set(SystemSet::on_update(GameState::WaitTurn).with_system(wait_turn_system))
-		.add_system_set(SystemSet::on_update(GameState::Battle).with_system(end_turn_system))
-		.add_system_set(SystemSet::on_enter(GameState::Battle).with_system(message_kafka_system))
-		.add_system_set(SystemSet::on_enter(GameState::Battle).with_system(receive_kafka_system))
-		.add_system_set(SystemSet::on_update(GameState::Battle).with_system(empty_system))
+		.add_system_set(
+			ConditionSet::new()
+				.run_in_state(GameState::MainMenu)
+				.with_system(start_game_system)
+				.into()
+		)
+		.add_system_set(
+			ConditionSet::new()
+				.run_in_state(GameState::Loading)
+				.with_system(read_map_system)
+				.with_system(setup_map_system)
+				.with_system(read_battle_system)
+				.with_system(generate_units_system)
+				.with_system(place_units_on_map_system)
+				.into()
+		)
+		.add_enter_system(GameState::Battle, setup_cursor_system.run_if_not(cursor_already_spawned))
+		.add_system_set(
+			ConditionSet::new()
+				.run_in_state(GameState::Battle)
+				.with_system(move_cursor_system)
+				.with_system(end_turn_system)
+				.into()
+		)
+		.add_system_set(
+			ConditionSet::new()
+				.run_in_state(GameState::WaitTurn)
+				.with_system(wait_turn_system)
+				.into()
+		)
 		.run();
 }
 
@@ -322,7 +341,7 @@ fn generate_units_system(mut events: EventReader<UnitsReadEvent>, mut events2: E
 }
 
 // Server
-fn place_units_on_map_system(mut events: EventReader<UnitsGeneratedEvent>, unit_positions: Query<(&UnitId, &PosX, &PosY)>, mut tiles: Query<(&Tile, &Pos, &mut Text)>, mut state: ResMut<State<GameState>>) {
+fn place_units_on_map_system(mut events: EventReader<UnitsGeneratedEvent>, unit_positions: Query<(&UnitId, &PosX, &PosY)>, mut tiles: Query<(&Tile, &Pos, &mut Text)>, mut commands: Commands) {
 	
 	for event in events.iter() {
 		info!("DEBUG: Starting to place units on map...");
@@ -342,18 +361,18 @@ fn place_units_on_map_system(mut events: EventReader<UnitsGeneratedEvent>, unit_
 			}
 		}
 		info!("DEBUG: Finished placing units on map.");
+		
 		info!("DEBUG: Setting GameState to WaitTurn...");
-		state.set(GameState::WaitTurn).unwrap();	
+		commands.insert_resource(NextState(GameState::WaitTurn));	
 		info!("DEBUG: Set GameState to WaitTurn.");
 	}
 }
 
 // Client & Server
-fn start_game_system(mut input: ResMut<Input<KeyCode>>, mut events: EventWriter<GameStartEvent>, mut state: ResMut<State<GameState>>) {
+fn start_game_system(mut input: ResMut<Input<KeyCode>>, mut events: EventWriter<GameStartEvent>, mut commands: Commands) {
 	if input.just_pressed(KeyCode::Space) {
 		info!("DEBUG: Setting GameState to Loading...");
-		state.set(GameState::Loading).unwrap();
-		input.reset(KeyCode::Space);
+		commands.insert_resource(NextState(GameState::Loading));
 		info!("DEBUG: Set GameState to Loading.");
         events.send(GameStartEvent);
     } 
@@ -624,14 +643,16 @@ fn move_cursor_system(input: Res<Input<KeyCode>>, mut cursors: Query<&mut Cursor
 }
 
 // Server
-fn wait_turn_system(mut units: Query<(&mut WTCurrent, &WTMax, &UnitId)>, mut game: ResMut<Game>, mut state: ResMut<State<GameState>>) {
+fn wait_turn_system(mut units: Query<(&mut WTCurrent, &WTMax, &UnitId)>, mut game: ResMut<Game>, mut commands: Commands) {
 	
 	// Decrease all units WT. If WT equals 0, set the unit as the current unit turn.
 	for (mut wt_current, wt_max, unit_id) in units.iter_mut() {
 		if wt_current.value == 0 {
 			info!("DEBUG: It is now unit {} turn.", unit_id.value);
 			game.current_unit = unit_id.value;
-			state.set(GameState::Battle).unwrap();
+			info!("DEBUG: Setting GameState to Battle..."); 
+			commands.insert_resource(NextState(GameState::Battle));
+			info!("DEBUG: Set GameState to Battle.");
 		} else {
 			wt_current.value = wt_current.value - 1;
 		}
@@ -639,11 +660,12 @@ fn wait_turn_system(mut units: Query<(&mut WTCurrent, &WTMax, &UnitId)>, mut gam
 }
 
 // Client
-fn end_turn_system(mut input: ResMut<Input<KeyCode>>, mut state: ResMut<State<GameState>>) {
+fn end_turn_system(mut input: ResMut<Input<KeyCode>>, mut commands: Commands) {
 	if input.just_pressed(KeyCode::T) {
-		info!("The current unit has ended its turn.");
-		state.set(GameState::WaitTurn).unwrap();
-		input.reset(KeyCode::T);
+		info!("DEBUG: The current unit has ended its turn.");
+		info!("DEBUG: Setting GameState to WaitTurn...");
+		commands.insert_resource(NextState(GameState::WaitTurn));
+		info!("DEBUG: Set GameState to WaitTurn.");
 	}
 }
 
@@ -665,6 +687,15 @@ fn receive_kafka_system() {
 	let gc = kafka_am::consumer::GameConsumer::new("topic2").unwrap();
 	let map = gc.recv();
 	println!("DEBUG: {}", map);
+}
+
+// Server
+fn cursor_already_spawned(cursors: Query<&Cursor>) -> bool {
+	let mut cursor_spawned = false;
+	for cursor in cursors.iter() {
+		cursor_spawned = true;
+	}
+	return cursor_spawned;
 }
 
 fn empty_system() {
