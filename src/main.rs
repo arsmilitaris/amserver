@@ -468,10 +468,10 @@ fn move_cursor_system(input: Res<Input<KeyCode>>, mut cursors: Query<&mut Cursor
 					}
 				}
 			}
+			
+			info!("DEBUG: Moving the cursor...");
+			
 		}
-		
-		info!("DEBUG: Moving the cursor...");
-		
 	} else if input.just_pressed(KeyCode::D) {
 	
 		// Save the previous cursor position to later be used in removing the cursor.
@@ -524,10 +524,10 @@ fn move_cursor_system(input: Res<Input<KeyCode>>, mut cursors: Query<&mut Cursor
 					}
 				}
 			}
+			
+			info!("DEBUG: Moving the cursor...");
+			
 		}
-		
-		info!("DEBUG: Moving the cursor...");
-		
 	} else if input.just_pressed(KeyCode::W) {
 	
 		// Save the previous cursor position to later be used in removing the cursor.
@@ -580,10 +580,10 @@ fn move_cursor_system(input: Res<Input<KeyCode>>, mut cursors: Query<&mut Cursor
 					}
 				}
 			}
+			
+			info!("DEBUG: Moving the cursor...");
+			
 		}
-		
-		info!("DEBUG: Moving the cursor...");
-		
 	} else if input.just_pressed(KeyCode::S) {
 	
 		// Save the previous cursor position to later be used in removing the cursor.
@@ -636,9 +636,10 @@ fn move_cursor_system(input: Res<Input<KeyCode>>, mut cursors: Query<&mut Cursor
 					}
 				}
 			}
+			
+			info!("DEBUG: Moving the cursor...");
+			
 		}
-		
-		info!("DEBUG: Moving the cursor...");
 	}
 }
 
