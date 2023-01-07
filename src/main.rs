@@ -11,7 +11,27 @@ use csv::StringRecord;
 
 use kafka::producer::{Producer, Record, RequiredAcks};
 
+use bevy_quinnet::{
+    server::{
+        certificate::CertificateRetrievalMode, ConnectionLostEvent, Endpoint, QuinnetServerPlugin,
+        Server, ServerConfigurationData,
+    },
+    shared::ClientId,
+};
+
+use serde::{Deserialize, Serialize};
+
 pub mod kafka_am;
+
+#[derive(Serialize, Deserialize)]
+enum ClientMessage {
+	StartGame,
+}
+
+#[derive(Serialize, Deserialize)]
+enum ServerMessage {
+	StartGame,
+}
 
 // COMPONENTS
 
@@ -151,6 +171,7 @@ fn main() {
 	
     App::new()
 		.add_plugins(DefaultPlugins)
+		.add_plugin(QuinnetServerPlugin::default())
 		.add_loopless_state(GameState::MainMenu)
 		.add_event::<GameStartEvent>()
 		.add_event::<MapReadEvent>()
@@ -158,10 +179,12 @@ fn main() {
 		.add_event::<UnitsReadEvent>()
 		.add_event::<UnitsGeneratedEvent>()
 		.init_resource::<Game>()
+		.add_enter_system(GameState::MainMenu, start_listening)
 		.add_system_set(
 			ConditionSet::new()
 				.run_in_state(GameState::MainMenu)
 				.with_system(start_game_system)
+				.with_system(handle_client_messages)
 				.into()
 		)
 		.add_system_set(
@@ -696,6 +719,33 @@ fn receive_kafka_system() {
 	let gc = kafka_am::consumer::GameConsumer::new("topic2").unwrap();
 	let map = gc.recv();
 	println!("DEBUG: {}", map);
+}
+
+// Server
+fn start_listening(mut server: ResMut<Server>) {
+	server
+		.start_endpoint(
+			ServerConfigurationData::new("127.0.0.1".to_string(), 6000, "0.0.0.0".to_string()),
+			CertificateRetrievalMode::GenerateSelfSigned,
+		)
+		.unwrap();
+}
+
+// Server
+fn handle_client_messages(
+    mut server: ResMut<Server>,
+) {
+    let mut endpoint = server.endpoint_mut();
+    while let Ok(Some((message, client_id))) = endpoint.receive_message::<ClientMessage>() {
+        match message {
+            // Match on your own message types ...
+            ClientMessage::StartGame => {
+                // Send a message to 1 client
+                endpoint.send_message(client_id, ServerMessage::StartGame).unwrap();
+                
+            }           
+        }
+    }
 }
 
 // Server
