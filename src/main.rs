@@ -26,11 +26,16 @@ pub mod kafka_am;
 #[derive(Serialize, Deserialize)]
 enum ClientMessage {
 	StartGame,
+	WaitTurnComplete,
 }
 
 #[derive(Serialize, Deserialize)]
 enum ServerMessage {
 	StartGame,
+	PlayerTurn {
+		player_id: usize,
+	},
+	WaitTurn,
 }
 
 // COMPONENTS
@@ -203,6 +208,7 @@ fn main() {
 				.run_in_state(GameState::Battle)
 				.with_system(move_cursor_system)
 				.with_system(end_turn_system)
+				.with_system(handle_wait_turn_completed)
 				.into()
 		)
 		.add_system_set(
@@ -211,6 +217,7 @@ fn main() {
 				.with_system(wait_turn_system)
 				.into()
 		)
+		.add_enter_system(GameState::WaitTurn, on_enter_wait_turn)
 		.run();
 }
 
@@ -667,13 +674,21 @@ fn move_cursor_system(input: Res<Input<KeyCode>>, mut cursors: Query<&mut Cursor
 }
 
 // Server
-fn wait_turn_system(mut units: Query<(&mut WTCurrent, &WTMax, &UnitId)>, mut game: ResMut<Game>, mut commands: Commands) {
+fn wait_turn_system(mut units: Query<(&mut WTCurrent, &WTMax, &UnitId)>, mut game: ResMut<Game>, mut commands: Commands, mut server: ResMut<Server>) {
+	
+	let endpoint = server.endpoint_mut();
 	
 	// Decrease all units WT. If WT equals 0, set the unit as the current unit turn.
 	for (mut wt_current, wt_max, unit_id) in units.iter_mut() {
 		if wt_current.value == 0 {
 			info!("DEBUG: It is now unit {} turn.", unit_id.value);
 			game.current_unit = unit_id.value;
+			
+			//// Send PlayerTurn message.
+			//info!("DEBUG: Sending Player Turn message...");
+			//endpoint.broadcast_message(ServerMessage::PlayerTurn { player_id: 1, }).unwrap();
+			//info!("DEBUG: Sent Player Turn message.");
+			
 			info!("DEBUG: Setting GameState to Battle..."); 
 			commands.insert_resource(NextState(GameState::Battle));
 			info!("DEBUG: Set GameState to Battle.");
@@ -681,6 +696,34 @@ fn wait_turn_system(mut units: Query<(&mut WTCurrent, &WTMax, &UnitId)>, mut gam
 			wt_current.value = wt_current.value - 1;
 		}
 	}
+}
+
+// Server
+fn on_enter_wait_turn(mut server: ResMut<Server>) {
+	// Send WaitTurn message.
+	let endpoint = server.endpoint_mut();
+	info!("DEBUG: Sending WaitTurn message...");
+	endpoint.broadcast_message(ServerMessage::WaitTurn).unwrap();
+	info!("DEBUG: Sent WaitTurn message.");
+}
+
+// Server
+fn handle_wait_turn_completed (
+mut server: ResMut<Server>,
+) {
+	let mut endpoint = server.endpoint_mut();
+
+	while let Ok(Some((message, client_id))) = endpoint.receive_message::<ClientMessage>() {
+        match message {
+            ClientMessage::WaitTurnComplete => {
+                
+info!("DEBUG: Sending PlayerTurn message...");                endpoint.broadcast_message(ServerMessage::PlayerTurn { player_id: 1, }).unwrap();
+info!("DEBUG: Sent PlayerTurn message.");
+                
+            },
+            _ => { empty_system(); },
+        }
+    }
 }
 
 // Client
@@ -734,6 +777,8 @@ fn start_listening(mut server: ResMut<Server>) {
 // Server
 fn handle_client_messages(
     mut server: ResMut<Server>,
+    mut events: EventWriter<GameStartEvent>,
+    mut commands: Commands,
 ) {
     let mut endpoint = server.endpoint_mut();
     while let Ok(Some((message, client_id))) = endpoint.receive_message::<ClientMessage>() {
@@ -742,8 +787,14 @@ fn handle_client_messages(
             ClientMessage::StartGame => {
                 // Send a message to 1 client
                 endpoint.send_message(client_id, ServerMessage::StartGame).unwrap();
-                
-            }           
+                // Start the game on the server.
+                info!("DEBUG: Starting game on server...");
+                info!("DEBUG: Setting GameState to Loading...");
+				commands.insert_resource(NextState(GameState::Loading));
+				info!("DEBUG: Set GameState to Loading.");
+				events.send(GameStartEvent);
+            },
+            _ => { empty_system(); },
         }
     }
 }
