@@ -27,6 +27,7 @@ pub mod kafka_am;
 enum ClientMessage {
 	StartGame,
 	WaitTurnComplete,
+	Wait,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -209,12 +210,14 @@ fn main() {
 				.with_system(move_cursor_system)
 				.with_system(end_turn_system)
 				.with_system(handle_wait_turn_completed)
+				//.with_system(handle_wait_client_message)
 				.into()
 		)
 		.add_system_set(
 			ConditionSet::new()
 				.run_in_state(GameState::WaitTurn)
 				.with_system(wait_turn_system)
+				.with_system(handle_wait_turn_completed)
 				.into()
 		)
 		.add_enter_system(GameState::WaitTurn, on_enter_wait_turn)
@@ -710,16 +713,33 @@ fn on_enter_wait_turn(mut server: ResMut<Server>) {
 // Server
 fn handle_wait_turn_completed (
 mut server: ResMut<Server>,
+mut commands: Commands,
+mut units: Query<(&mut WTCurrent, &WTMax)>
 ) {
 	let mut endpoint = server.endpoint_mut();
 
 	while let Ok(Some((message, client_id))) = endpoint.receive_message::<ClientMessage>() {
         match message {
             ClientMessage::WaitTurnComplete => {
+                info!("DEBUG: Received WaitTurnComplete message.");
+				info!("DEBUG: Sending PlayerTurn message...");
+				endpoint.broadcast_message(ServerMessage::PlayerTurn { player_id: 1, }).unwrap();
+				info!("DEBUG: Sent PlayerTurn message.");
                 
-info!("DEBUG: Sending PlayerTurn message...");                endpoint.broadcast_message(ServerMessage::PlayerTurn { player_id: 1, }).unwrap();
-info!("DEBUG: Sent PlayerTurn message.");
-                
+            },
+            ClientMessage::Wait => {
+				info!("DEBUG: Received Wait message.");
+				
+				// Reset the current unit's WT.
+				for (mut wt_current, wt_max) in units.iter_mut() {
+					if wt_current.value == 0 {
+						wt_current.value = wt_max.value;
+						break;
+					}
+				}
+				info!("DEBUG: Setting GameState to WaitTurn...");
+				commands.insert_resource(NextState(GameState::WaitTurn));
+				info!("DEBUG: Set GameState to WaitTurn...");
             },
             _ => { empty_system(); },
         }
@@ -797,6 +817,27 @@ fn handle_client_messages(
             _ => { empty_system(); },
         }
     }
+}
+
+// Server
+fn handle_wait_client_message(mut server: ResMut<Server>, mut commands: Commands) {
+	let mut endpoint = server.endpoint_mut();
+	
+	while let Ok(Some((message, client_id))) = endpoint.receive_message::<ClientMessage>() {
+		match message {
+			ClientMessage::Wait => {
+				info!("DEBUG: Received Wait message.");
+				info!("DEBUG: Sending WaitTurn message...");
+				endpoint.broadcast_message(ServerMessage::WaitTurn).unwrap();
+				info!("DEBUG: Sent WaitTurn message.");
+				
+				commands.insert_resource(NextState(GameState::WaitTurn));
+			},
+			_ => { 
+				info!("DEBUG: Received other message.");
+			},
+		}
+	}
 }
 
 // Server
