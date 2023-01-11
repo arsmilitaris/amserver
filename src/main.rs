@@ -32,11 +32,15 @@ enum ClientMessage {
 
 #[derive(Serialize, Deserialize)]
 enum ServerMessage {
-	StartGame,
-	PlayerTurn {
-		player_id: usize,
+	StartGame { 
+		client_id: ClientId,
 	},
-	WaitTurn,
+	PlayerTurn {
+		client_id: ClientId,
+	},
+	WaitTurn {
+		wait_turns: Vec<(UnitId, WTCurrent)>,
+	},
 }
 
 // COMPONENTS
@@ -59,7 +63,7 @@ struct Pos {
 	y: usize,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Serialize, Deserialize)]
 struct UnitId { value: usize, }
 
 #[derive(Component)]
@@ -80,7 +84,7 @@ struct PosY { value: usize, }
 #[derive(Component)]
 struct WTMax { value: usize, }
 
-#[derive(Component, Debug)]
+#[derive(Component, Clone, Debug, Serialize, Deserialize)]
 struct WTCurrent { value: usize, }
 
 #[derive(Component)]
@@ -220,7 +224,7 @@ fn main() {
 				.with_system(handle_wait_turn_completed)
 				.into()
 		)
-		.add_enter_system(GameState::WaitTurn, on_enter_wait_turn)
+		.add_exit_system(GameState::WaitTurn, on_complete_wait_turn)
 		.run();
 }
 
@@ -677,20 +681,20 @@ fn move_cursor_system(input: Res<Input<KeyCode>>, mut cursors: Query<&mut Cursor
 }
 
 // Server
-fn wait_turn_system(mut units: Query<(&mut WTCurrent, &WTMax, &UnitId)>, mut game: ResMut<Game>, mut commands: Commands, mut server: ResMut<Server>) {
+fn wait_turn_system(mut units: Query<(&mut WTCurrent, &WTMax, &UnitId, &UnitTeam)>, mut game: ResMut<Game>, mut commands: Commands, mut server: ResMut<Server>) {
 	
 	let endpoint = server.endpoint_mut();
 	
 	// Decrease all units WT. If WT equals 0, set the unit as the current unit turn.
-	for (mut wt_current, wt_max, unit_id) in units.iter_mut() {
+	for (mut wt_current, wt_max, unit_id, unit_team) in units.iter_mut() {
 		if wt_current.value == 0 {
 			info!("DEBUG: It is now unit {} turn.", unit_id.value);
 			game.current_unit = unit_id.value;
 			
-			//// Send PlayerTurn message.
-			//info!("DEBUG: Sending Player Turn message...");
-			//endpoint.broadcast_message(ServerMessage::PlayerTurn { player_id: 1, }).unwrap();
-			//info!("DEBUG: Sent Player Turn message.");
+			// Send PlayerTurn message.
+			info!("DEBUG: Sending Player Turn message...");
+			endpoint.broadcast_message(ServerMessage::PlayerTurn { client_id: unit_team.value as u64, }).unwrap();
+			info!("DEBUG: Sent Player Turn message.");
 			
 			info!("DEBUG: Setting GameState to Battle..."); 
 			commands.insert_resource(NextState(GameState::Battle));
@@ -702,11 +706,19 @@ fn wait_turn_system(mut units: Query<(&mut WTCurrent, &WTMax, &UnitId)>, mut gam
 }
 
 // Server
-fn on_enter_wait_turn(mut server: ResMut<Server>) {
+fn on_complete_wait_turn(mut server: ResMut<Server>, units: Query<(&UnitId, &WTCurrent)>) {
+	
+	// Build WaitTurn message.
+	let mut unit_wts: Vec<(UnitId, WTCurrent)> = Vec::new();
+	for (unit_id, current_wt) in units.iter() {
+		unit_wts.push((unit_id.clone(), current_wt.clone()));
+	}
 	// Send WaitTurn message.
 	let endpoint = server.endpoint_mut();
 	info!("DEBUG: Sending WaitTurn message...");
-	endpoint.broadcast_message(ServerMessage::WaitTurn).unwrap();
+	endpoint.broadcast_message(ServerMessage::WaitTurn {
+		wait_turns: unit_wts,
+	}).unwrap();
 	info!("DEBUG: Sent WaitTurn message.");
 }
 
@@ -714,7 +726,7 @@ fn on_enter_wait_turn(mut server: ResMut<Server>) {
 fn handle_wait_turn_completed (
 mut server: ResMut<Server>,
 mut commands: Commands,
-mut units: Query<(&mut WTCurrent, &WTMax)>
+mut units: Query<(&mut WTCurrent, &WTMax, &UnitTeam)>
 ) {
 	let mut endpoint = server.endpoint_mut();
 
@@ -722,16 +734,24 @@ mut units: Query<(&mut WTCurrent, &WTMax)>
         match message {
             ClientMessage::WaitTurnComplete => {
                 info!("DEBUG: Received WaitTurnComplete message.");
-				info!("DEBUG: Sending PlayerTurn message...");
-				endpoint.broadcast_message(ServerMessage::PlayerTurn { player_id: 1, }).unwrap();
-				info!("DEBUG: Sent PlayerTurn message.");
                 
+                // Get the current unit's team.
+                for (mut wt_current, wt_max, unit_team) in units.iter_mut() {
+					//info!("DEBUG: WT Current is {}.", wt_current.value);
+					if wt_current.value == 0 {
+						info!("DEBUG: The current unit's team is {}.", unit_team.value);
+						info!("DEBUG: Sending PlayerTurn message...");
+						endpoint.send_message(client_id, ServerMessage::PlayerTurn { client_id: unit_team.value as u64, }).unwrap();
+						info!("DEBUG: Sent PlayerTurn message.");
+						break;
+					}
+                }
             },
             ClientMessage::Wait => {
 				info!("DEBUG: Received Wait message.");
 				
 				// Reset the current unit's WT.
-				for (mut wt_current, wt_max) in units.iter_mut() {
+				for (mut wt_current, wt_max, unit_team) in units.iter_mut() {
 					if wt_current.value == 0 {
 						wt_current.value = wt_max.value;
 						break;
@@ -806,7 +826,7 @@ fn handle_client_messages(
             // Match on your own message types ...
             ClientMessage::StartGame => {
                 // Send a message to 1 client
-                endpoint.send_message(client_id, ServerMessage::StartGame).unwrap();
+                endpoint.send_message(client_id, ServerMessage::StartGame { client_id: client_id, }).unwrap();
                 // Start the game on the server.
                 info!("DEBUG: Starting game on server...");
                 info!("DEBUG: Setting GameState to Loading...");
@@ -827,9 +847,9 @@ fn handle_wait_client_message(mut server: ResMut<Server>, mut commands: Commands
 		match message {
 			ClientMessage::Wait => {
 				info!("DEBUG: Received Wait message.");
-				info!("DEBUG: Sending WaitTurn message...");
-				endpoint.broadcast_message(ServerMessage::WaitTurn).unwrap();
-				info!("DEBUG: Sent WaitTurn message.");
+				//info!("DEBUG: Sending WaitTurn message...");
+				//endpoint.broadcast_message(ServerMessage::WaitTurn).unwrap();
+				//info!("DEBUG: Sent WaitTurn message.");
 				
 				commands.insert_resource(NextState(GameState::WaitTurn));
 			},
