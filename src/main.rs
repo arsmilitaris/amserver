@@ -25,6 +25,7 @@ pub mod kafka_am;
 
 #[derive(Serialize, Deserialize)]
 enum ClientMessage {
+	GetClientId,
 	StartGame,
 	WaitTurnComplete,
 	Wait,
@@ -32,6 +33,9 @@ enum ClientMessage {
 
 #[derive(Serialize, Deserialize)]
 enum ServerMessage {
+	ClientId {
+		client_id: ClientId
+	},
 	StartGame { 
 		client_id: ClientId,
 	},
@@ -174,7 +178,9 @@ struct UnitsGeneratedEvent;
 #[derive(Resource, Default)]
 struct Game {
 	current_unit: usize,
+	has_started: bool,
 }
+
 
 // Client & Server
 fn main() {
@@ -214,6 +220,7 @@ fn main() {
 				.with_system(move_cursor_system)
 				.with_system(end_turn_system)
 				.with_system(handle_wait_turn_completed)
+				.with_system(handle_client_messages)
 				//.with_system(handle_wait_client_message)
 				.into()
 		)
@@ -788,6 +795,7 @@ fn end_turn_system(mut input: ResMut<Input<KeyCode>>, mut units: Query<(&mut WTC
 fn setup_game_resource_system(mut commands: Commands) {
 	commands.insert_resource(Game {
 		current_unit: 0,
+		has_started: false,
 	});
 }
 
@@ -819,20 +827,54 @@ fn handle_client_messages(
     mut server: ResMut<Server>,
     mut events: EventWriter<GameStartEvent>,
     mut commands: Commands,
+    mut game: ResMut<Game>,
+    mut units: Query<(&UnitId, &WTCurrent)>,
 ) {
     let mut endpoint = server.endpoint_mut();
     while let Ok(Some((message, client_id))) = endpoint.receive_message::<ClientMessage>() {
         match message {
             // Match on your own message types ...
             ClientMessage::StartGame => {
-                // Send a message to 1 client
-                endpoint.send_message(client_id, ServerMessage::StartGame { client_id: client_id, }).unwrap();
-                // Start the game on the server.
-                info!("DEBUG: Starting game on server...");
-                info!("DEBUG: Setting GameState to Loading...");
-				commands.insert_resource(NextState(GameState::Loading));
-				info!("DEBUG: Set GameState to Loading.");
-				events.send(GameStartEvent);
+                // Broadcast StartGame message.
+                info!("DEBUG: Sending StartGame message...");
+                endpoint.broadcast_message(ServerMessage::StartGame { client_id: client_id, }).unwrap();
+                info!("DEBUG: Sent StartGame message.");
+                
+                // If the server game hasn't started yet, start the game on the server.
+                if game.has_started == false {
+					info!("DEBUG: Starting game on server...");
+					game.has_started = true;
+					info!("DEBUG: Setting GameState to Loading...");
+					commands.insert_resource(NextState(GameState::Loading));
+					info!("DEBUG: Set GameState to Loading.");
+					events.send(GameStartEvent);
+                } else {
+					break;
+					// Send WaitTurn and PlayerTurn message to new client.
+					
+					// Build WaitTurn message.
+					let mut wts: Vec<(UnitId, WTCurrent)> = Vec::new();
+					for (unit_id, wt_current) in units.iter() {
+						wts.push((unit_id.clone(), wt_current.clone()));
+					}
+					info!("DEBUG: Sending WaitTurn message...");
+					endpoint.send_message(client_id, ServerMessage::WaitTurn {
+						wait_turns: wts,
+					}).unwrap();
+					info!("DEBUG: Sent WaitTurn message.");
+					info!("DEBUG: Sending PlayerTurn message...");
+					endpoint.send_message(client_id, ServerMessage::PlayerTurn {
+						client_id: client_id,
+					}).unwrap();
+					info!("DEBUG: Sent PlayerTurn message.");
+                }               
+            },
+            ClientMessage::GetClientId => {
+				info!("DEBUG: Sending ClientId message...");
+				endpoint.send_message(client_id, ServerMessage::ClientId {
+					client_id: client_id,
+				}).unwrap();
+				info!("DEBUG: Sent ClientId message.");
             },
             _ => { empty_system(); },
         }
