@@ -45,6 +45,7 @@ enum ServerMessage {
 	WaitTurn {
 		wait_turns: Vec<(UnitId, WTCurrent)>,
 	},
+	Wait,
 }
 
 // COMPONENTS
@@ -757,6 +758,11 @@ mut units: Query<(&mut WTCurrent, &WTMax, &UnitTeam)>
             ClientMessage::Wait => {
 				info!("DEBUG: Received Wait message.");
 				
+				// Send Wait message.
+				info!("DEBUG: Sending Wait message...");
+				endpoint.send_message(client_id, ServerMessage::Wait).unwrap();
+				info!("DEBUG: Sent Wait message.");
+				
 				// Reset the current unit's WT.
 				for (mut wt_current, wt_max, unit_team) in units.iter_mut() {
 					if wt_current.value == 0 {
@@ -889,9 +895,9 @@ fn handle_wait_client_message(mut server: ResMut<Server>, mut commands: Commands
 		match message {
 			ClientMessage::Wait => {
 				info!("DEBUG: Received Wait message.");
-				//info!("DEBUG: Sending WaitTurn message...");
-				//endpoint.broadcast_message(ServerMessage::WaitTurn).unwrap();
-				//info!("DEBUG: Sent WaitTurn message.");
+				info!("DEBUG: Sending Wait message...");
+				endpoint.broadcast_message(ServerMessage::Wait).unwrap();
+				info!("DEBUG: Sent Wait message.");
 				
 				commands.insert_resource(NextState(GameState::WaitTurn));
 			},
