@@ -221,7 +221,7 @@ fn main() {
 				.with_system(move_cursor_system)
 				.with_system(end_turn_system)
 				.with_system(handle_wait_turn_completed)
-				.with_system(handle_client_messages)
+				//.with_system(handle_client_messages)
 				//.with_system(handle_wait_client_message)
 				.into()
 		)
