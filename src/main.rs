@@ -41,6 +41,7 @@ enum ServerMessage {
 	},
 	PlayerTurn {
 		client_id: ClientId,
+		current_unit: usize,
 	},
 	WaitTurn {
 		wait_turns: Vec<(UnitId, WTCurrent)>,
@@ -701,7 +702,7 @@ fn wait_turn_system(mut units: Query<(&mut WTCurrent, &WTMax, &UnitId, &UnitTeam
 			
 			// Send PlayerTurn message.
 			info!("DEBUG: Sending Player Turn message...");
-			endpoint.broadcast_message(ServerMessage::PlayerTurn { client_id: unit_team.value as u64, }).unwrap();
+			endpoint.broadcast_message(ServerMessage::PlayerTurn { client_id: unit_team.value as u64, current_unit: unit_id.value, }).unwrap();
 			info!("DEBUG: Sent Player Turn message.");
 			
 			info!("DEBUG: Setting GameState to Battle..."); 
@@ -748,9 +749,9 @@ mut units: Query<(&mut WTCurrent, &WTMax, &UnitTeam)>
 					//info!("DEBUG: WT Current is {}.", wt_current.value);
 					if wt_current.value == 0 {
 						info!("DEBUG: The current unit's team is {}.", unit_team.value);
-						info!("DEBUG: Sending PlayerTurn message...");
-						endpoint.send_message(client_id, ServerMessage::PlayerTurn { client_id: unit_team.value as u64, }).unwrap();
-						info!("DEBUG: Sent PlayerTurn message.");
+						//info!("DEBUG: Sending PlayerTurn message...");
+						//endpoint.send_message(client_id, ServerMessage::PlayerTurn { client_id: unit_team.value as u64, }).unwrap();
+						//info!("DEBUG: Sent PlayerTurn message.");
 						break;
 					}
                 }
@@ -868,11 +869,11 @@ fn handle_client_messages(
 						wait_turns: wts,
 					}).unwrap();
 					info!("DEBUG: Sent WaitTurn message.");
-					info!("DEBUG: Sending PlayerTurn message...");
-					endpoint.send_message(client_id, ServerMessage::PlayerTurn {
-						client_id: client_id,
-					}).unwrap();
-					info!("DEBUG: Sent PlayerTurn message.");
+					//info!("DEBUG: Sending PlayerTurn message...");
+					//endpoint.send_message(client_id, ServerMessage::PlayerTurn {
+						//client_id: client_id,
+					//}).unwrap();
+					//info!("DEBUG: Sent PlayerTurn message.");
                 }               
             },
             ClientMessage::GetClientId => {
