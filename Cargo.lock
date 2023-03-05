@@ -73,6 +73,8 @@ dependencies = [
  "bevy",
  "bevy_quinnet",
  "csv",
+ "gridly",
+ "gridly_grids",
  "iyes_loopless",
  "kafka",
  "serde",
@@ -922,6 +924,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a"
 
 [[package]]
+name = "brownstone"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "030ea61398f34f1395ccbeb046fb68c87b631d1f34567fed0f0f11fa35d18d8d"
+dependencies = [
+ "arrayvec",
+]
+
+[[package]]
 name = "bstr"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1738,6 +1749,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "363e3677e55ad168fef68cf9de3a4a310b53124c5e784c53a1d70e92d23f2126"
 dependencies = [
  "bitflags",
+]
+
+[[package]]
+name = "gridly"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69b5f96df7f1eda939ff0ef33148e029e281225507e7cc81a974ae11f8b405c9"
+
+[[package]]
+name = "gridly_grids"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d27433ac1f006d9b02c164c29e612341d6af4ae440902df377e600766b4909c9"
+dependencies = [
+ "brownstone",
+ "gridly",
 ]
 
 [[package]]

@@ -1,8 +1,11 @@
 // (C) Copyright 2023 Ars Militaris Dev
 
-use bevy::prelude::*;
+use bevy::{prelude::*, render::camera::ScalingMode, diagnostic::LogDiagnosticsPlugin, diagnostic::FrameTimeDiagnosticsPlugin};
 
 use iyes_loopless::prelude::*;
+
+use gridly_grids::VecGrid;
+use gridly::prelude::*;
 
 use std::fs;
 
@@ -58,7 +61,20 @@ struct Cursor {
 }
 
 #[derive(Component)]
+struct Map {
+	map: Vec<Vec<(usize, TileType, Vec<Entity>, Vec<Entity>)>>,
+}
+
+#[derive(Component)]
 struct Tile;
+
+#[derive(Component, Debug, Clone, PartialEq)]
+enum TileType {
+	Grass, 
+}
+
+#[derive(Component)]
+struct GameText;
 
 #[derive(Component)]
 struct Unit;
@@ -155,6 +171,7 @@ struct UnitAttributes {
 enum GameState {
 	MainMenu,
 	Loading,
+	LoadMap,
 	Battle,
 	WaitTurn,
 }
@@ -189,6 +206,8 @@ fn main() {
 	
     App::new()
 		.add_plugins(DefaultPlugins)
+		//.add_plugin(LogDiagnosticsPlugin::default())
+        //.add_plugin(FrameTimeDiagnosticsPlugin::default())
 		.add_plugin(QuinnetServerPlugin::default())
 		.add_loopless_state(GameState::MainMenu)
 		.add_event::<GameStartEvent>()
@@ -214,6 +233,33 @@ fn main() {
 				.with_system(generate_units_system)
 				.with_system(place_units_on_map_system)
 				.into()
+		)
+		.add_enter_system(GameState::LoadMap, setup_grid_system)
+		.add_enter_system(GameState::LoadMap, setup_camera_system)
+		.add_system(setup_text_system
+			.run_in_state(GameState::LoadMap)
+			.run_if(grid_already_setup)
+			.run_if_not(text_already_setup)
+		)
+		.add_system(z_order_system
+			.run_in_state(GameState::LoadMap)
+			.run_if(text_already_setup)
+		)
+		.add_system(move_camera_system
+			.run_in_state(GameState::LoadMap)
+		)
+		.add_system(spawn_gaul_warrior
+			.run_in_state(GameState::LoadMap)
+			.run_if(grid_already_setup)
+			.run_if_not(warrior_already_spawned)
+		)
+		.add_system(move_gaul_warrior
+			.run_in_state(GameState::LoadMap)
+			.run_if(warrior_already_spawned)
+		)
+		.add_system(test_system_2
+			.run_in_state(GameState::LoadMap)
+			.run_if(warrior_already_spawned)
 		)
 		.add_enter_system(GameState::Battle, setup_cursor_system.run_if_not(cursor_already_spawned))
 		.add_system_set(
@@ -283,7 +329,9 @@ fn setup_map_system(mut events: EventReader<MapReadEvent>, mut events2: EventWri
 	
 	for event in events.iter() {
 		// Spawn camera.
-		commands.spawn(Camera2dBundle::default());
+		commands.spawn(
+			Camera2dBundle::default()
+		);
 		
 		let map = &event.map;
 		
@@ -417,10 +465,10 @@ fn place_units_on_map_system(mut events: EventReader<UnitsGeneratedEvent>, unit_
 // Client & Server
 fn start_game_system(mut input: ResMut<Input<KeyCode>>, mut events: EventWriter<GameStartEvent>, mut commands: Commands) {
 	if input.just_pressed(KeyCode::Space) {
-		info!("DEBUG: Setting GameState to Loading...");
-		commands.insert_resource(NextState(GameState::Loading));
-		info!("DEBUG: Set GameState to Loading.");
-        events.send(GameStartEvent);
+		info!("DEBUG: Setting GameState to LoadMap...");
+		commands.insert_resource(NextState(GameState::LoadMap));
+		info!("DEBUG: Set GameState to LoadMap.");
+        //events.send(GameStartEvent);
     } 
 }
 
@@ -906,6 +954,270 @@ fn handle_wait_client_message(mut server: ResMut<Server>, mut commands: Commands
 				info!("DEBUG: Received other message.");
 			},
 		}
+	}
+}
+
+// Client & Server
+fn setup_grid_system(mut commands: Commands) {
+	// Create map.
+	info!("DEBUG: Creating map...");
+	let mut map: Vec<Vec<(usize, TileType, Vec<Entity>, Vec<Entity>)>> = Vec::new();
+	for i in 0..30 {
+		let mut map_line: Vec<(usize, TileType, Vec<Entity>, Vec<Entity>)> = Vec::new();
+		for j in 0..30 {
+			map_line.push((1, TileType::Grass, Vec::new(), Vec::new()));
+		}
+		map.push(map_line);
+	}
+	
+	//for i in 0..3 {
+	//	map[i][0].0 = 10;
+	//}
+	
+	info!("DEBUG: Created map.");
+	
+	commands.spawn((
+		Map { map: map },
+	));
+}
+
+// Client
+fn setup_camera_system(mut commands: Commands) {
+	commands.spawn(Camera2dBundle::default());
+}
+
+// Client
+fn setup_text_system(mut query: Query<&mut Map>, mut commands: Commands, asset_server: Res<AssetServer>) {
+	let font = asset_server.load("fonts/FiraSans-Bold.ttf");
+	let text_style = TextStyle {
+		font,
+		font_size: 20.0,
+		color: Color::WHITE,
+	};
+	let text_alignment = TextAlignment::CENTER;
+	
+	let mut map = query.single_mut();
+	for i in 0..map.map.len() {
+		for j in 0..map.map[i].len() {
+			//let tile_string: String = map.map[i][j].2.to_string();
+			
+			for k in 0..map.map[i][j].0 {
+				let entity_id = commands.spawn((
+					//Text2dBundle {
+					//	text: Text::from_section(tile_string, text_style.clone()).with_alignment(text_alignment),
+					//	transform: Transform::from_xyz((i as f32) * 256.0 / 2.0 - (j as f32) * 256.0 / 2.0, (i as f32) * 128.0 / 2.0 + (j as f32) * 128.0 / 2.0, 0.0),
+					//	..default()
+					//},
+					SpriteBundle {
+						texture: asset_server.load("tile.png"),
+						transform: Transform::from_xyz((i as f32) * 256.0 / 2.0 - (j as f32) * 256.0 / 2.0, ((i as f32) * 128.0 / 2.0 + (j as f32) * 128.0 / 2.0) * (111.0 / (128.0 / 2.0) - 1.0) + (k as f32) * 30.0, 1.0),
+						..default()
+					},
+					GameText,
+				)).id();
+				
+				map.map[i][j].3.push(entity_id);
+			}
+		}
+	}
+	
+}
+
+// Client
+fn z_order_system(
+mut query: Query<&mut Transform, With<GameText>>,
+mut unit_query: Query<&mut Transform, (With<Unit>, Without<GameText>)>,
+map_query: Query<&Map>,
+) {
+	//info!("DEBUG: Z-Order system running...");
+	let map = &map_query.single().map;
+	//info!("DEBUG: Map length is: {}.", map.len());
+	
+	let mut counter = 0.0;
+	let mut counter_2 = 0.0;
+	
+	for i in (0..map.len()).rev() {
+		for j in (0..map[i].len()).rev() {
+			counter += 0.00001;
+			
+			//info!("Tile Entity ID is: {:?}.", map[i][j].3);
+			for k in 0..map[i][j].3.len() {
+				counter_2 += 0.0000001;
+				if let Ok(mut tile_transform) = query.get_mut(map[i][j].3[k]) {
+					//info!("DEBUG: Tile position is: {:?}.", tile_transform.translation);
+					tile_transform.translation.z = counter + counter_2;
+				}
+			}
+			
+			// If there is a unit on the tile, order it.
+			if map[i][j].2.len() > 0 {
+				// Order unit.
+				if let Ok(mut unit_transform) = unit_query.get_mut(map[i][j].2[0]) {
+					if let Ok(mut tile_transform) = query.get_mut(map[i][j].3[map[i][j].3.len() - 1]) {
+						unit_transform.translation = tile_transform.translation;
+						unit_transform.translation.y += 100.0;
+						unit_transform.translation.z += 0.0000001;
+					}
+					//unit_transform.translation.z = counter + counter_2 + 0.0000001;
+				}
+			}
+		}
+	}
+}
+
+// Client
+fn z_unit_order_system(
+mut query: Query<&mut Transform, With<Unit>>,
+map_query: Query<&Map>,
+) {
+	let map = &map_query.single().map;
+
+	for i in 0..map.len() {
+		for j in 0..map[i].len() {
+			if map[i][j].2.len() > 0 {
+				// Order unit.
+				if let Ok(mut unit_transform) = query.get_mut(map[i][j].2[0]) {
+					//if let Ok(mut tile_transform) = 
+				}
+				
+				
+			}
+		}
+	}
+
+	for unit_transform in query.iter_mut() {
+		
+	}
+}
+
+// Client
+fn move_camera_system(
+mut camera_transform_query: Query<&mut Transform, With<Camera>>,
+windows: Res<Windows>,
+) {
+	let window = windows.get_primary().unwrap();
+	
+	let mut camera_transform = camera_transform_query.single_mut();
+	
+	if let Some(_position) = window.cursor_position() {
+		// Cursor is inside the window.
+		//info!("DEBUG: Cursor position is: {:?}.", _position);
+		//info!("DEBUG: Window width is: {:?}.", window.width());
+		//info!("DEBUG: Window height is: {:?}.", window.height());
+		
+		if _position.x <= 0.0 + 20.0 {
+			//info!("DEBUG: Camera translation is: {:?}.", camera_transform.translation);
+			camera_transform.translation -= Vec3::X * 3.0;
+		} else if _position.x >= window.width() - 20.0 {
+			camera_transform.translation += Vec3::X * 3.0;
+		}
+		
+		if _position.y <= 0.0 + 20.0 {
+			//info!("DEBUG: Camera translation is: {:?}.", camera_transform.translation);
+			camera_transform.translation -= Vec3::Y * 3.0;
+		} else if _position.y >= window.height() - 20.0 {
+			camera_transform.translation += Vec3::Y * 3.0;
+		}
+		
+	} else {
+		// Cursor is not inside the window.
+	}
+}
+
+// Client & Server
+fn spawn_gaul_warrior(
+mut commands: Commands,
+mut map_query: Query<&mut Map>,
+asset_server: Res<AssetServer>,
+) {
+	let mut map = &mut map_query.single_mut().map;
+	
+	let entity_id = commands.spawn((
+		SpriteBundle {
+			texture: asset_server.load("gaul_warrior.png"),
+			transform: Transform::from_xyz((0 as f32) * 256.0 / 2.0 - (0 as f32) * 256.0 / 2.0, (0 as f32) * 128.0 / 2.0 + (0 as f32) * 128.0 / 2.0 + (map[0][0].0 as f32) * 15.0 + 100.0, 1.0),
+			..default()
+		},
+		Unit,
+		Pos {
+			x: 0,
+			y: 0,
+		},
+	)).id();
+	
+	map[0][0].2.push(entity_id);
+}
+
+// Prototype
+fn move_gaul_warrior(
+mut map_query: Query<&mut Map>,
+mut unit_query: Query<(Entity, &mut Pos), With<Unit>>,
+mut input: ResMut<Input<KeyCode>>,
+) {
+	let mut map = &mut map_query.single_mut().map;
+	
+	if input.just_pressed(KeyCode::W) {
+		info!("DEBUG: W pressed.");
+		info!("DEBUG: unit_query length is: {}.", unit_query.iter_mut().len());
+		for (entity_id, mut pos) in unit_query.iter_mut() {
+			//info!("
+			map[pos.x][pos.y + 1].2.push(entity_id);
+			map[pos.x][pos.y].2.pop();
+			pos.y += 1;
+		}
+	}
+	
+}
+
+// Utility
+fn print_gaul_warrior(
+query: Query<&Transform, With<Unit>>,
+) {
+	let unit_transform = query.single();
+	info!("DEBUG: Unit translation is: {:?}.", unit_transform.translation);
+}
+
+// Client & Server
+fn grid_already_setup(query: Query<&Map>) -> bool {
+	if query.iter().len() == 0 {
+		return false;
+	} else {
+		return true;
+	}
+}
+
+// Client
+fn text_already_setup(query: Query<&GameText>) -> bool {
+	if query.iter().len() == 0 {
+		return false;
+	} else {
+		return true;
+	}
+}
+
+// Client & Server
+fn warrior_already_spawned(query: Query<&Unit>) -> bool {
+	if query.iter().len() == 0 {
+		return false;
+	} else {
+		return true;
+	}
+}
+
+fn test_system(text: Query<&Transform, With<GameText>>) {
+	info!("DEBUG: Text is at position {}.", text.single().translation);
+}
+
+fn test_system_2(
+map_query: Query<&Map>,
+mut transform_query: Query<&Transform>,
+) {
+	let map = &map_query.single().map;
+	
+	let entity_id = map[1][0].3[0];
+	
+	if let Ok(transform) = transform_query.get(entity_id) {
+		info!("DEBUG: Tile at position (1, 0) is at coordinates: {:?}.", transform.translation);
 	}
 }
 
