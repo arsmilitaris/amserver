@@ -64,6 +64,11 @@ enum UnitAction {
 	},
 }
 
+struct PlayerTurnMessage {
+	client_id: ClientId,
+	current_unit: usize,
+}
+
 // COMPONENTS
 
 #[derive(Component)]
@@ -246,6 +251,11 @@ struct Timers {
 	six_second_timer: Timer,
 }
 
+#[derive(Resource, Default)]
+struct PlayerTurnMessages {
+	messages: Vec<(PlayerTurnMessage, Timer)>,
+}
+
 // Client & Server
 fn main() {
 	
@@ -264,6 +274,7 @@ fn main() {
 		.add_event::<UnitsGeneratedEvent>()
 		.init_resource::<Game>()
 		.init_resource::<Timers>()
+		.init_resource::<PlayerTurnMessages>()
 		.add_systems(OnEnter(GameState::MainMenu), start_listening)
 		.add_systems(Update,
 						handle_client_messages
@@ -276,6 +287,12 @@ fn main() {
 		.add_systems(Update, 
 						handle_loading_complete_messages
 							.run_if(in_state(GameState::ClientsLoading))
+		)
+		.add_systems(Update, send_player_turn_messages
+							.run_if(in_state(GameState::WaitTurn))
+		)
+		.add_systems(Update, send_player_turn_messages
+							.run_if(in_state(GameState::Battle))
 		)
 		.add_systems(OnEnter(GameState::Loading), on_enter_loading_state)
 		//.add_systems(OnEnter(GameState::LoadMap), setup_grid_system)
@@ -508,7 +525,7 @@ fn place_units_on_map_system(mut events: EventReader<UnitsGeneratedEvent>, unit_
 }
 
 // Server
-fn wait_turn_system(mut units: Query<(&mut WTCurrent, &WTMax, &UnitId, &UnitTeam)>, mut game: ResMut<Game>, mut commands: Commands, mut server: ResMut<Server>, mut next_state: ResMut<NextState<GameState>>) {
+fn wait_turn_system(mut units: Query<(&mut WTCurrent, &WTMax, &UnitId, &UnitTeam)>, mut game: ResMut<Game>, mut commands: Commands, mut server: ResMut<Server>, mut next_state: ResMut<NextState<GameState>>, mut player_turn_messages: ResMut<PlayerTurnMessages>) {
 	
 	let endpoint = server.endpoint_mut();
 	
@@ -518,10 +535,14 @@ fn wait_turn_system(mut units: Query<(&mut WTCurrent, &WTMax, &UnitId, &UnitTeam
 			info!("DEBUG: It is now unit {} turn.", unit_id.value);
 			game.current_unit = unit_id.value;
 			
-			// Send PlayerTurn message.
-			info!("DEBUG: Sending Player Turn message...");
-			endpoint.broadcast_message(ServerMessage::PlayerTurn { client_id: unit_team.value as u64, current_unit: unit_id.value, }).unwrap();
-			info!("DEBUG: Sent Player Turn message.");
+			//// Send PlayerTurn message.
+			//info!("DEBUG: Sending Player Turn message...");
+			//endpoint.broadcast_message(ServerMessage::PlayerTurn { client_id: unit_team.value as u64, current_unit: unit_id.value, }).unwrap();
+			//info!("DEBUG: Sent Player Turn message.");
+			
+			// Schedule a PlayerTurn message for 0.5 seconds from now.
+			// This is a fix for BUG#6
+			player_turn_messages.messages.push((PlayerTurnMessage { client_id: unit_team.value as u64, current_unit: unit_id.value, }, Timer::from_seconds(0.5, TimerMode::Once)));
 			
 			info!("DEBUG: Setting GameState to Battle..."); 
 			//commands.insert_resource(NextState(GameState::Battle));
@@ -615,7 +636,8 @@ fn setup_game_resource_system(mut commands: Commands) {
 fn start_listening(mut server: ResMut<Server>) {
 	server
 		.start_endpoint(
-			ServerConfiguration::from_string("127.0.0.1:6000").unwrap(),
+			//ServerConfiguration::from_string("127.0.0.1:6000").unwrap(),
+			ServerConfiguration::from_string("139.162.244.70:6000").unwrap(),
 			CertificateRetrievalMode::GenerateSelfSigned {
 				server_hostname: "amserver".to_string(),
 			},
@@ -802,6 +824,26 @@ mut events: EventWriter<GameStartEvent>,
 	info!("DEBUG: Sending GameStartEvent...");
 	events.send(GameStartEvent);
 	info!("DEBUG: Sent GameStartEvent.");
+}
+
+// Server
+fn send_player_turn_messages(mut server: ResMut<Server>, mut player_turn_messages: ResMut<PlayerTurnMessages>, time: Res<Time>) {
+
+	let mut messages = &mut player_turn_messages.messages;
+	if messages.len() == 0 {
+		
+	} else if messages[0].1.tick(time.delta()).just_finished() {
+		let endpoint = server.endpoint_mut();
+		
+		// Send PlayerTurn message.
+		info!("DEBUG: Sending Player Turn message...");
+		endpoint.broadcast_message(ServerMessage::PlayerTurn { client_id: messages[0].0.client_id, current_unit: messages[0].0.current_unit, }).unwrap();
+		info!("DEBUG: Sent Player Turn message.");
+		
+		messages.remove(0);
+	}
+	
+	
 }
 
 fn empty_system() {
