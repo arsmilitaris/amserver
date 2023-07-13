@@ -6,11 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy = "0.9.1"
+bevy = "0.11"
 csv = "1.1.6"
 kafka = "0.9.0"
-iyes_loopless = "0.9.1"
-bevy_quinnet = "0.2.0"
+bevy_quinnet = "0.5"
 serde = "1.0.152"
 gridly = "0.9.0"
 gridly_grids = "0.5.0"
