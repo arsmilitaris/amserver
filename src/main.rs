@@ -9,6 +9,7 @@ use gridly_grids::VecGrid;
 use gridly::prelude::*;
 
 use std::fs;
+use std::collections::HashMap;
 
 use csv::Reader;
 use csv::StringRecord;
@@ -256,6 +257,11 @@ struct PlayerTurnMessages {
 	messages: Vec<(PlayerTurnMessage, Timer)>,
 }
 
+#[derive(Resource, Default)]
+struct PlayerLoadings {
+	loadings: HashMap<ClientId, bool>,
+}
+
 // Client & Server
 fn main() {
 	
@@ -275,6 +281,7 @@ fn main() {
 		.init_resource::<Game>()
 		.init_resource::<Timers>()
 		.init_resource::<PlayerTurnMessages>()
+		.init_resource::<PlayerLoadings>()
 		.add_systems(OnEnter(GameState::MainMenu), start_listening)
 		.add_systems(Update,
 						handle_client_messages
@@ -294,6 +301,7 @@ fn main() {
 		.add_systems(Update, send_player_turn_messages
 							.run_if(in_state(GameState::Battle))
 		)
+		.add_systems(Update, check_loadings.run_if(in_state(GameState::ClientsLoading)))
 		.add_systems(OnEnter(GameState::Loading), on_enter_loading_state)
 		//.add_systems(OnEnter(GameState::LoadMap), setup_grid_system)
 		//.add_systems(OnEnter(GameState::LoadMap), setup_camera_system)
@@ -653,6 +661,7 @@ fn handle_client_messages(
     mut game: ResMut<Game>,
     mut units: Query<(&UnitId, &WTCurrent)>,
     mut next_state: ResMut<NextState<GameState>>,
+    mut player_loadings: ResMut<PlayerLoadings>,
 ) {
     let mut endpoint = server.endpoint_mut();
     
@@ -699,6 +708,9 @@ fn handle_client_messages(
 					}               
 				},
 				ClientMessage::GetClientId => {
+					// Register client and its load status.
+					player_loadings.loadings.insert(client_id, false);
+					
 					info!("DEBUG: Sending ClientId message...");
 					endpoint.send_message(client_id, ServerMessage::ClientId {
 						client_id: client_id,
@@ -795,6 +807,7 @@ camera_transform_query: Query<&Transform, With<Camera>>,
 fn handle_loading_complete_messages(
 mut server: ResMut<Server>,
 mut next_state: ResMut<NextState<GameState>>,
+mut player_loadings: ResMut<PlayerLoadings>,
 ) {
 	let endpoint = server.endpoint_mut();
 	
@@ -803,17 +816,43 @@ mut next_state: ResMut<NextState<GameState>>,
 			match message {
 				ClientMessage::LoadingComplete => {
 					info!("DEBUG: Received LoadingComplete message from client {}.", client_id);
-					endpoint.broadcast_message(ServerMessage::StartGame2).unwrap();
-					info!("DEBUG: Sent StartGame2 message to clients.");
+					// Record that the player has loaded.
+					player_loadings.loadings.insert(client_id, true);
 					
-					// Set GameState to Loading.
-					info!("DEBUG: Setting GameState to Loading...");
-					next_state.set(GameState::Loading);
-					info!("DEBUG: Set GameState to Loading.");
+					//endpoint.broadcast_message(ServerMessage::StartGame2).unwrap();
+					//info!("DEBUG: Sent StartGame2 message to clients.");
+					
+					//// Set GameState to Loading.
+					//info!("DEBUG: Setting GameState to Loading...");
+					//next_state.set(GameState::Loading);
+					//info!("DEBUG: Set GameState to Loading.");
 				},
 				_ => { empty_system() }
 			}
 		}	
+	}
+}
+
+// Server
+fn check_loadings(
+player_loadings: Res<PlayerLoadings>,
+mut server: ResMut<Server>,
+mut next_state: ResMut<NextState<GameState>>,
+) {
+	// Compute if all bools in the HashMap are set to true.
+	let all_clients_loaded = &player_loadings.loadings.values().all(|&value| value);
+	
+	if *all_clients_loaded {
+		// All clients loaded.
+		info!("DEBUG: All clients have loaded.");
+		let endpoint = server.endpoint_mut();
+		endpoint.broadcast_message(ServerMessage::StartGame2).unwrap();
+		info!("DEBUG: Sent StartGame2 message to clients.");
+		
+		// Set GameState to Loading.
+		info!("DEBUG: Setting GameState to Loading...");
+		next_state.set(GameState::Loading);
+		info!("DEBUG: Set GameState to Loading.");
 	}
 }
 
