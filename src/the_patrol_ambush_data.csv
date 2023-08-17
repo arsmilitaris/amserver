@@ -1,17 +1,17 @@
-unit_id,unit_team,unit_name,unit_class,pos_x,pos_y,WT_MAX,WT_CURRENT,HP_MAX,HP_CURRENT,MP_MAX,MP_CURRENT,STR,VIT,INT,MEN,AGI,DEX,LUK
-1,1,Hanno,Carthaginian Officer,1,1,600,600,60,60,0,0,60,60,60,60,60,60,50
-2,1,Mutt,Libyan Captain,1,2,601,601,60,60,0,0,60,60,60,60,60,60,50
-3,1,Ithobaal,Libyan Spearman,1,3,602,602,60,60,0,0,60,60,60,60,60,60,50
-4,1,Bogu,Libyan Spearman,1,4,603,603,60,60,0,0,60,60,60,60,60,60,50
-5,1,Libyan Spearman,Libyan Spearman,1,5,604,604,60,60,0,0,60,60,60,60,60,60,50
-6,1,Libyan Spearman,Libyan Spearman,1,6,605,605,60,60,0,0,60,60,60,60,60,60,50
-7,1,Libyan Spearman,Libyan Spearman,1,7,606,606,60,60,0,0,60,60,60,60,60,60,50
-8,1,Libyan Spearman,Libyan Spearman,1,8,607,607,60,60,0,0,60,60,60,60,60,60,50
-9,2,Naked Fanatic,Naked Fanatic,9,1,608,608,60,60,0,0,60,60,60,60,60,60,50
-10,2,Naked Fanatic,Naked Fanatic,9,2,609,609,60,60,0,0,60,60,60,60,60,60,50
-11,2,Gaul Warrior,Gaul Warrior,9,3,610,610,60,60,0,0,60,60,60,60,60,60,50
-12,2,Gaul Warrior,Gaul Warrior,9,4,611,611,60,60,0,0,60,60,60,60,60,60,50
-13,2,Gaul Warrior,Gaul Warrior,9,5,612,612,60,60,0,0,60,60,60,60,60,60,50
-14,2,Gaul Warrior,Gaul Warrior,9,6,613,613,60,60,0,0,60,60,60,60,60,60,50
-15,2,Gaul Archer,Gaul Archer,9,7,614,614,60,60,0,0,60,60,60,60,60,60,50
-16,2,Gaul Archer,Gaul Archer,9,8,615,615,60,60,0,0,60,60,60,60,60,60,50
+unit_id,unit_team,unit_name,unit_class,pos_x,pos_y,WT_MAX,WT_CURRENT,HP_MAX,HP_CURRENT,MP_MAX,MP_CURRENT,STR,VIT,INT,MEN,AGI,DEX,LUK,unit_sprite,DIR,MovementRange,AttackRange,AttackType
+1,1,Hanno,Carthaginian Officer,1,1,600,600,60,60,0,0,60,60,60,60,60,60,50,hannibal,East,7,1,Melee
+2,1,Mutt,Libyan Captain,1,2,601,601,60,60,0,0,60,60,60,60,60,60,50,libyan_spearman,East,6,2,Melee
+3,1,Ithobaal,Libyan Spearman,1,3,602,602,60,60,0,0,60,60,60,60,60,60,50,libyan_spearman,East,6,2,Melee
+4,1,Bogu,Libyan Spearman,1,4,603,603,60,60,0,0,60,60,60,60,60,60,50,libyan_spearman,East,6,2,Melee
+5,1,Libyan Spearman,Libyan Spearman,1,5,604,604,60,60,0,0,60,60,60,60,60,60,50,libyan_spearman,East,6,2,Melee
+6,1,Libyan Spearman,Libyan Spearman,1,6,605,605,60,60,0,0,60,60,60,60,60,60,50,libyan_spearman,East,6,2,Melee
+7,1,Libyan Spearman,Libyan Spearman,1,7,606,606,60,60,0,0,60,60,60,60,60,60,50,libyan_spearman,East,6,2,Melee
+8,1,Libyan Spearman,Libyan Spearman,1,8,607,607,60,60,0,0,60,60,60,60,60,60,50,libyan_spearman,East,6,2,Melee
+9,2,Naked Fanatic,Naked Fanatic,9,1,608,608,60,60,0,0,60,60,60,60,60,60,50,naked_fanatic_swordsman,West,8,1,Melee
+10,2,Naked Fanatic,Naked Fanatic,9,2,609,609,60,60,0,0,60,60,60,60,60,60,50,naked_fanatic_swordsman,West,8,1,Melee
+11,2,Gaul Warrior,Gaul Warrior,9,3,610,610,60,60,0,0,60,60,60,60,60,60,50,gaul_spearman,West,7,2,Melee
+12,2,Gaul Warrior,Gaul Warrior,9,4,611,611,60,60,0,0,60,60,60,60,60,60,50,gaul_spearman,West,7,2,Melee
+13,2,Gaul Warrior,Gaul Warrior,9,5,612,612,60,60,0,0,60,60,60,60,60,60,50,gaul_spearman,West,7,2,Melee
+14,2,Gaul Warrior,Gaul Warrior,9,6,613,613,60,60,0,0,60,60,60,60,60,60,50,gaul_spearman,West,7,2,Melee
+15,2,Gaul Archer,Gaul Archer,9,7,614,614,60,60,0,0,60,60,60,60,60,60,50,gaul_spearman,West,7,2,Melee
+16,2,Gaul Archer,Gaul Archer,9,8,615,615,60,60,0,0,60,60,60,60,60,60,50,gaul_spearman,West,7,2,Melee
