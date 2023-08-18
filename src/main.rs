@@ -5,6 +5,8 @@ use bevy::{prelude::*, render::camera::ScalingMode, log::LogPlugin, diagnostic::
 use bevy::ecs::system::SystemParam;
 use bevy::ecs::world::World;
 
+use bevy::utils::Duration;
+
 use gridly_grids::VecGrid;
 use gridly::prelude::*;
 
@@ -44,6 +46,11 @@ enum ClientMessage {
 		origin: Pos,
 		destination: Pos,
 	},
+	BasicAttack {
+		attacker: Pos,
+		target: Pos,
+		damage: usize,
+	},
 }
 
 #[derive(Serialize, Deserialize)]
@@ -67,6 +74,12 @@ enum ServerMessage {
 		origin: Pos,
 		destination: Pos,
 	},
+	BasicAttack {
+		attacker: Pos,
+		target: Pos,
+		damage: usize,
+		is_counterattack: bool,
+	},
 }
 
 struct PlayerTurnMessage {
@@ -87,6 +100,7 @@ enum UnitAction {
 	BasicAttack {
 		target: Pos,
 		is_counterattack: bool,
+		damage: usize,
 	},
 	DoNothing,
 }
@@ -182,6 +196,7 @@ struct TalkAction {
 struct BasicAttackAction {
 	target: Pos,
 	is_counterattack: bool,
+	damage: usize,
 }
 
 #[derive(Component)]
@@ -795,10 +810,13 @@ fn on_complete_wait_turn(mut server: ResMut<Server>, units: Query<(&UnitId, &WTC
 fn handle_wait_turn_completed (
 mut server: ResMut<Server>,
 mut commands: Commands,
+mut map_query: Query<&mut Map>,
 mut current_unit_query: Query<(Entity, &mut UnitActions, &mut WTCurrent, &WTMax), With<CurrentUnit>>,
 mut next_state: ResMut<NextState<GameState>>,
 ) {
 	let mut endpoint = server.endpoint_mut();
+
+	let mut map = &mut map_query.single_mut().map;
 
 	for client_id in endpoint.clients() {
 		while let Ok(Some(message)) = endpoint.receive_message_from::<ClientMessage>(client_id) {
@@ -852,6 +870,24 @@ mut next_state: ResMut<NextState<GameState>>,
 					}).unwrap();
 					//info!("DEBUG: Sent `Move` message to clients.");
 				},
+				ClientMessage::BasicAttack { attacker, target, damage } => {
+					info!("DEBUG: Received BasicAttack message from client {}.", client_id);
+					
+					// Insert `BasicAttack` `UnitAction` in the unit.
+					let (entity, mut unit_actions, mut wt_current, wt_max) = current_unit_query.single_mut();
+					unit_actions.unit_actions.push(UnitActionTuple(UnitAction::BasicAttack {
+						target: Pos { x: target.x, y: target.y, },
+						is_counterattack: false,
+						damage: damage,
+					}, 0.0));
+					
+					// Insert an `Attacker` marker component on the attacking unit.
+					commands.entity(entity).insert(Attacker {});
+					
+					// Insert the `Target` marker component on the target unit.
+					let target_entity = map[target.x][target.y].2[0];
+					commands.entity(target_entity).insert(Target {});
+				}
 				_ => { empty_system(); },
 			}
 		}
@@ -1155,9 +1191,9 @@ time: Res<Time>,
 					info!("DEBUG: Current unit action is Talk.");
 					commands.entity(entity).insert(TalkAction { message: message.clone(), });
 				},
-				UnitAction::BasicAttack { target, is_counterattack, } => {
+				UnitAction::BasicAttack { target, is_counterattack, damage} => {
 					info!("DEBUG: Current unit action is BasicAttack.");
-					commands.entity(entity).insert(BasicAttackAction { target: target.clone(), is_counterattack: is_counterattack.clone(), });
+					commands.entity(entity).insert(BasicAttackAction { target: target.clone(), is_counterattack: is_counterattack.clone(), damage: damage.clone(), });
 				}
 				UnitAction::DoNothing => {
 					info!("DEBUG: Current unit action is DoNothing.");
@@ -1306,7 +1342,11 @@ mut commands: Commands,
 map_query: Query<&Map>,
 mut attack_unit_query: Query<(Entity, &UnitId, &mut UnitActions, &STR, &Pos, &mut DIR, &BasicAttackAction), (With<Attacker>, Without<Target>)>,
 mut target_unit_query: Query<(&UnitId, &mut UnitActions, &Pos, &mut HPCurrent, &AttackRange, &AttackType), (With<Target>, Without<Attacker>)>,
+mut server: ResMut<Server>,
+time: Res<Time>,
 ) {
+	let mut endpoint = server.endpoint_mut();
+
 	let map = &map_query.single().map;
 
 	for (entity, unit_id, mut unit_actions, str, pos, mut dir, basic_attack_action) in attack_unit_query.iter_mut() {
@@ -1338,10 +1378,25 @@ mut target_unit_query: Query<(&UnitId, &mut UnitActions, &Pos, &mut HPCurrent, &
 			
 			// Add random modifier to damage.
 			// Damage is (STR / 3) + modifier.
-			let damage = (str.value / 3) + random_dmg_modifier;
+			let attack_damage = (str.value / 3) + random_dmg_modifier;
+			
+			// Send `BasicAttack` message to clients.
+			info!("DEBUG: Sending `BasicAttack` message to clients.");
+			match unit_actions.unit_actions[0].0 {
+				UnitAction::BasicAttack { target, is_counterattack, damage } => {
+					endpoint.broadcast_message(ServerMessage::BasicAttack {
+						attacker: Pos { x: pos.x, y: pos.y, },
+						target: Pos { x: target_pos.x, y: target_pos.y, },
+						damage: attack_damage.clone(),
+						is_counterattack: is_counterattack,
+					}).unwrap();
+					info!("DEBUG: Sent `BasicAttack` message to clients.");
+				},
+				_ => { empty_system(); },
+			}
 			
 			// Subtract damage from target HP.
-			if damage > hp_current.value {
+			if attack_damage > hp_current.value {
 				hp_current.value = 0;
 				
 				// Remove Attacker marker component.
@@ -1356,17 +1411,17 @@ mut target_unit_query: Query<(&UnitId, &mut UnitActions, &Pos, &mut HPCurrent, &
 				
 				return;
 			} else {
-				hp_current.value -= damage;
+				hp_current.value -= attack_damage;
 			}
 			
-			info!("DEBUG: Unit {:?} did {:?} damage to unit {:?}.", unit_id, damage, target_id);
+			info!("DEBUG: Unit {:?} did {:?} damage to unit {:?}.", unit_id, attack_damage, target_id);
 			info!("DEBUG: Unit {} now has {} HP.", target_id.value, hp_current.value);
 			
 			// Remove Target marker component from the target.
 			commands.entity(target_entity).remove::<Target>();
 			
 			match unit_actions.unit_actions[0].0 {
-				UnitAction::BasicAttack { target, is_counterattack, } => {
+				UnitAction::BasicAttack { target, is_counterattack, damage } => {
 					// If it is not already a counter-attack...
 					if !is_counterattack {
 						// If target is not a ranged unit...
@@ -1381,10 +1436,15 @@ mut target_unit_query: Query<(&UnitId, &mut UnitActions, &Pos, &mut HPCurrent, &
 								
 								if target_possible_attacks.contains(pos) {
 									// Insert a BasicAttack as a counter-attack.
+									
+									// Schedule a `BasicAttack` `ServerMessage` to
+									// 2 seconds from now, so that the client is
+									// able to process the first `BasicAttack`.
 									target_unit_actions.unit_actions.push(UnitActionTuple(UnitAction::BasicAttack {
 										target: Pos { x: pos.x, y: pos.y, },
 										is_counterattack: true,
-									}, 0.0));
+										damage: 0,
+									}, (time.elapsed() + Duration::from_secs(2)).as_secs() as f32));
 									
 									// Insert the Attacker marker component on the counter-attacking unit.
 									commands.entity(target_entity).insert(Attacker {});
@@ -1392,6 +1452,7 @@ mut target_unit_query: Query<(&UnitId, &mut UnitActions, &Pos, &mut HPCurrent, &
 									// Insert the Target marker component on the unit that did the initial attack.
 									// This will result in an infinite Attack and CounterAttack loop for now.
 									commands.entity(entity).insert(Target {});
+									
 								}
 							}
 						}
