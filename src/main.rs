@@ -80,6 +80,9 @@ enum ServerMessage {
 		damage: usize,
 		is_counterattack: bool,
 	},
+	GameOver {
+		winner: ControlledBy,
+	}
 }
 
 struct PlayerTurnMessage {
@@ -430,6 +433,7 @@ impl Default for Game {
     }
 }
 
+#[derive(Serialize, Deserialize, Copy, Clone)]
 enum ControlledBy {
 	Player,
 	AI,
@@ -525,6 +529,10 @@ fn main() {
 		.add_systems(Update, handle_unit_death
 			.run_if(in_state(GameState::Battle))
 		)
+		.add_systems(Update, handle_game_over
+			.run_if(in_state(GameState::Battle))
+		)
+		.add_systems(OnTransition { from: GameState::Battle, to: GameState::MainMenu, }, handle_battle_to_main_menu_transition)
 		//.add_systems(Update, z_order_system
 		//	.run_if(in_state(GameState::LoadMap))
 		//	.run_if(text_already_setup)
@@ -1569,6 +1577,68 @@ mut next_state: ResMut<NextState<GameState>>,
 				info!("DEBUG: Set GameState to WaitTurn.");
 			}
 		}
+	}
+}
+
+// Prototype
+fn handle_game_over(
+unit_query: Query<(Entity, &UnitTeam)>,
+mut next_state: ResMut<NextState<GameState>>,
+mut game: ResMut<Game>,
+mut server: ResMut<Server>,
+) {
+	let mut endpoint = server.endpoint_mut();
+
+	let mut player_still_alive: bool = false;
+	let mut ai_still_alive: bool = false;
+	for (entity, unit_team) in unit_query.iter() {
+		if unit_team.value == 1 {
+			player_still_alive = true;
+		}
+		
+		if unit_team.value == 2 {
+			ai_still_alive = true;
+		}
+	}
+	
+	if !player_still_alive {
+		// Player lost.
+		info!("DEBUG: Game over. Winner is AI.");
+		game.winner = ControlledBy::AI;
+		
+		// Send GameOver message.
+		endpoint.broadcast_message(ServerMessage::GameOver {
+			 winner: game.winner,
+		}).unwrap();
+		
+		info!("DEBUG: Setting GameState to MainMenu...");
+		next_state.set(GameState::MainMenu);
+		info!("DEBUG: Set GameState to MainMenu.");
+	}
+	
+	if !ai_still_alive {
+		// Player won.
+		info!("DEBUG: Game over. Winner is Player.");
+		game.winner = ControlledBy::Player;
+		
+		// Send GameOver message.
+		endpoint.broadcast_message(ServerMessage::GameOver {
+			 winner: game.winner,
+		}).unwrap();
+		
+		info!("DEBUG: Setting GameState to MainMenu...");
+		next_state.set(GameState::MainMenu);
+		info!("DEBUG: Set GameState to MainMenu.");
+	}
+}
+
+// Prototype
+fn handle_battle_to_main_menu_transition(
+mut commands: Commands,
+mut query: Query<Entity, Without<Window>>,
+) {
+	for entity in query.iter() {
+		commands.entity(entity).despawn();
 	}
 }
 
